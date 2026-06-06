@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getJobs } from '../api/jobs';
+import { DEFAULT_JOBS_PAGE_SIZE, getJobs } from '../api/jobs';
 import { getQueues } from '../api/queues';
 import { JobStateBadge } from '../components/JobStateBadge';
 import { useRelativeTime } from '../hooks/useRelativeTime';
@@ -20,6 +20,8 @@ const JOB_STATES: JobState[] = [
   'cancelled'
 ];
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
+
 export const Jobs: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -30,8 +32,9 @@ export const Jobs: React.FC = () => {
   // Extract pagination and filters from URL Search Params
   const queueFilter = searchParams.get('queue') || '';
   const stateFilter = searchParams.get('state') || '';
-  const offset = parseInt(searchParams.get('offset') || '0', 10);
-  const limit = 50;
+  const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10));
+  const limitParam = parseInt(searchParams.get('limit') || String(DEFAULT_JOBS_PAGE_SIZE), 10);
+  const limit = PAGE_SIZE_OPTIONS.includes(limitParam) ? limitParam : DEFAULT_JOBS_PAGE_SIZE;
 
   // 1. Fetch available queues for filter dropdown
   const { data: queues } = useQuery({
@@ -42,12 +45,12 @@ export const Jobs: React.FC = () => {
 
   // 2. Fetch jobs based on URL filters
   const { data, isLoading, error } = useQuery({
-    queryKey: ['jobs', queueFilter, stateFilter, offset],
+    queryKey: ['jobs', queueFilter, stateFilter, limit, offset],
     queryFn: () => getJobs({
       queue: queueFilter || undefined,
       state: (stateFilter as JobState) || undefined,
       limit,
-      offset
+      offset,
     }),
     refetchInterval: 10000 // automatically refetch every 10s
   });
@@ -70,7 +73,8 @@ export const Jobs: React.FC = () => {
     } else {
       nextParams.delete(key);
     }
-    nextParams.set('offset', '0'); // reset pagination
+    nextParams.set('offset', '0');
+    nextParams.set('limit', limit.toString());
     setSearchParams(nextParams);
   };
 
@@ -78,6 +82,14 @@ export const Jobs: React.FC = () => {
     const nextParams = new URLSearchParams(searchParams);
     const newOffset = direction === 'next' ? offset + limit : Math.max(0, offset - limit);
     nextParams.set('offset', newOffset.toString());
+    nextParams.set('limit', limit.toString());
+    setSearchParams(nextParams);
+  };
+
+  const handlePageSizeChange = (nextLimit: number) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('limit', nextLimit.toString());
+    nextParams.set('offset', '0');
     setSearchParams(nextParams);
   };
 
@@ -209,27 +221,55 @@ export const Jobs: React.FC = () => {
         </div>
 
         {/* Pagination Toolbar */}
-        <div className="border-t border-darkBorder bg-[#0c0c0e] px-4 py-3 flex items-center justify-between text-xs font-mono">
-          <button
-            onClick={() => handlePageChange('prev')}
-            disabled={offset === 0 || isLoading}
-            className="flex items-center gap-1 px-3 py-1.5 border border-darkBorder rounded-[4px] hover:border-textMuted disabled:opacity-40 disabled:hover:border-darkBorder text-textPrimary transition-all duration-150"
-          >
-            <ChevronLeft size={14} /> Previous
-          </button>
-          
-          <div className="text-textMuted">
-            Page <span className="text-textPrimary font-bold">{currentPage}</span> of <span className="text-textPrimary font-bold">{totalPages}</span>
-            <span className="hidden sm:inline"> ({totalJobs} total jobs)</span>
+        <div className="border-t border-darkBorder bg-[#0c0c0e] px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handlePageChange('prev')}
+              disabled={offset === 0 || isLoading}
+              className="flex items-center gap-1 px-3 py-1.5 border border-darkBorder rounded-[4px] hover:border-textMuted disabled:opacity-40 disabled:hover:border-darkBorder text-textPrimary transition-all duration-150"
+            >
+              <ChevronLeft size={14} /> Previous
+            </button>
+
+            <button
+              onClick={() => handlePageChange('next')}
+              disabled={offset + limit >= totalJobs || isLoading}
+              className="flex items-center gap-1 px-3 py-1.5 border border-darkBorder rounded-[4px] hover:border-textMuted disabled:opacity-40 disabled:hover:border-darkBorder text-textPrimary transition-all duration-150"
+            >
+              Next <ChevronRight size={14} />
+            </button>
           </div>
 
-          <button
-            onClick={() => handlePageChange('next')}
-            disabled={offset + limit >= totalJobs || isLoading}
-            className="flex items-center gap-1 px-3 py-1.5 border border-darkBorder rounded-[4px] hover:border-textMuted disabled:opacity-40 disabled:hover:border-darkBorder text-textPrimary transition-all duration-150"
-          >
-            Next <ChevronRight size={14} />
-          </button>
+          <div className="text-textMuted text-center">
+            Page <span className="text-textPrimary font-bold">{currentPage}</span> of{' '}
+            <span className="text-textPrimary font-bold">{totalPages}</span>
+            <span className="hidden sm:inline"> ({totalJobs} total jobs)</span>
+            {totalJobs > 0 && (
+              <span className="hidden md:inline">
+                {' '}
+                · showing {offset + 1}–{Math.min(offset + limit, totalJobs)}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <label htmlFor="jobs-page-size" className="text-textMuted uppercase text-[10px] font-bold">
+              Per page
+            </label>
+            <select
+              id="jobs-page-size"
+              value={limit}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              disabled={isLoading}
+              className="min-w-[72px]"
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { LiveStats } from '../api/types';
 import { generateLiveStats } from '../api/mock';
+import { parseStatsEvent } from '../api/transforms';
+import type { LiveStats } from '../api/types';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -50,16 +51,19 @@ export function useLiveStats() {
           }
         };
 
-        eventSource.onmessage = (event) => {
+        const handleStats = (event: MessageEvent) => {
           if (!active) return;
           try {
-            const stats: LiveStats = JSON.parse(event.data);
+            const stats = parseStatsEvent(event.data);
             dataRef.current = stats;
             setData(stats);
           } catch (e) {
             console.error('Failed to parse SSE data:', e);
           }
         };
+
+        eventSource.addEventListener('stats', handleStats);
+        eventSource.onmessage = handleStats;
 
         eventSource.onerror = () => {
           if (!active) return;

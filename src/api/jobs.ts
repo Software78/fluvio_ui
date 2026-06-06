@@ -1,8 +1,10 @@
-import { request } from './client';
+import { request, requestWithTotal } from './client';
+import { transformJob, transformJobsResponse } from './transforms';
 import type { Job, JobState } from './types';
 import * as mock from './mock';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+export const DEFAULT_JOBS_PAGE_SIZE = 25;
 
 /**
  * Fetch a list of jobs, optionally filtered by queue, state, and kind.
@@ -24,14 +26,21 @@ export async function getJobs(params: {
     );
   }
   
+  const limit = params.limit ?? DEFAULT_JOBS_PAGE_SIZE;
+  const offset = params.offset ?? 0;
+
   const queryParams = new URLSearchParams();
   if (params.queue) queryParams.set('queue', params.queue);
   if (params.state) queryParams.set('state', params.state);
   if (params.kind) queryParams.set('kind', params.kind);
-  if (params.limit !== undefined) queryParams.set('limit', params.limit.toString());
-  if (params.offset !== undefined) queryParams.set('offset', params.offset.toString());
-  
-  return request<{ jobs: Job[]; total: number }>(`/jobs?${queryParams.toString()}`);
+  queryParams.set('limit', limit.toString());
+  queryParams.set('offset', offset.toString());
+
+  const { data, total } = await requestWithTotal<Parameters<typeof transformJobsResponse>[0]>(
+    `/jobs?${queryParams.toString()}`,
+  );
+
+  return transformJobsResponse(data, { total, limit, offset });
 }
 
 /**
@@ -41,7 +50,8 @@ export async function getJobById(id: number): Promise<Job> {
   if (USE_MOCK) {
     return mock.mockGetJobById(id);
   }
-  return request<Job>(`/jobs/${id}`);
+  const raw = await request<Parameters<typeof transformJob>[0]>(`/jobs/${id}`);
+  return transformJob(raw);
 }
 
 /**

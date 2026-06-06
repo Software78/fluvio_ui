@@ -1,6 +1,7 @@
 import { request } from './client';
-import type { QueueStats } from './types';
 import * as mock from './mock';
+import { transformQueues } from './transforms';
+import type { QueueStats } from './types';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
@@ -11,7 +12,10 @@ export async function getQueues(): Promise<QueueStats[]> {
   if (USE_MOCK) {
     return mock.mockGetQueues();
   }
-  return request<QueueStats[]>('/queues');
+  const raw = await request<Array<{ queue: string } & Omit<QueueStats, 'name'>>>(
+    '/queues',
+  );
+  return transformQueues(raw);
 }
 
 /**

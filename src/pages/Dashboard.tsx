@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLiveStats } from '../hooks/useLiveStats';
+import { useLiveStatsContext } from '../context/LiveStatsContext';
 import { StatCard } from '../components/StatCard';
 import { Sparkline } from '../components/Sparkline';
 import { AlertCircle } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-  const { data, connected } = useLiveStats();
+  const { data, connected } = useLiveStatsContext();
   const [throughputHistory, setThroughputHistory] = useState<number[]>([]);
   const navigate = useNavigate();
 

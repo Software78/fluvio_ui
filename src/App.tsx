@@ -1,12 +1,12 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ToastProvider } from './components/Toast';
-import { Shell } from './components/Shell';
-import { Dashboard } from './pages/Dashboard';
-import { Jobs } from './pages/Jobs';
-import { JobDetail } from './pages/JobDetail';
-import { Queues } from './pages/Queues';
-import { useLiveStats } from './hooks/useLiveStats';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { Shell } from "./components/Shell";
+import { ToastProvider } from "./components/Toast";
+import { LiveStatsProvider, useLiveStatsContext } from "./context/LiveStatsContext";
+import { Dashboard } from "./pages/Dashboard";
+import { JobDetail } from "./pages/JobDetail";
+import { Jobs } from "./pages/Jobs";
+import { Queues } from "./pages/Queues";
 
 // Configure React Query Client
 const queryClient = new QueryClient({
@@ -22,7 +22,7 @@ const queryClient = new QueryClient({
  * Renders the primary routes wrapped in the live telemetry header shell.
  */
 function AppContent() {
-  const { data, connected } = useLiveStats();
+  const { data, connected } = useLiveStatsContext();
   const workersOnline = data?.workers_online ?? 0;
 
   return (
@@ -43,7 +43,9 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <AppContent />
+        <LiveStatsProvider>
+          <AppContent />
+        </LiveStatsProvider>
       </ToastProvider>
     </QueryClientProvider>
   );
