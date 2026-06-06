@@ -1,9 +1,7 @@
 import { request, requestWithTotal } from './client';
 import { transformJob, transformJobsResponse } from './transforms';
 import type { Job, JobState } from './types';
-import * as mock from './mock';
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 export const DEFAULT_JOBS_PAGE_SIZE = 25;
 
 /**
@@ -16,16 +14,6 @@ export async function getJobs(params: {
   limit?: number;
   offset?: number;
 }): Promise<{ jobs: Job[]; total: number }> {
-  if (USE_MOCK) {
-    return mock.mockGetJobs(
-      params.queue || undefined,
-      params.state || undefined,
-      params.kind || undefined,
-      params.limit,
-      params.offset
-    );
-  }
-  
   const limit = params.limit ?? DEFAULT_JOBS_PAGE_SIZE;
   const offset = params.offset ?? 0;
 
@@ -47,9 +35,6 @@ export async function getJobs(params: {
  * Fetch a single job's details.
  */
 export async function getJobById(id: number): Promise<Job> {
-  if (USE_MOCK) {
-    return mock.mockGetJobById(id);
-  }
   const raw = await request<Parameters<typeof transformJob>[0]>(`/jobs/${id}`);
   return transformJob(raw);
 }
@@ -58,9 +43,6 @@ export async function getJobById(id: number): Promise<Job> {
  * Cancel a pending or scheduled job.
  */
 export async function cancelJob(id: number): Promise<{ ok: boolean }> {
-  if (USE_MOCK) {
-    return mock.mockCancelJob(id);
-  }
   return request<{ ok: boolean }>(`/jobs/${id}/cancel`, {
     method: 'POST',
   });

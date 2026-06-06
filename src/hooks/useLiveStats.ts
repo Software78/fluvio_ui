@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { generateLiveStats } from '../api/mock';
 import { parseStatsEvent } from '../api/transforms';
 import type { LiveStats } from '../api/types';
 
-const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const SSE_URL = `${BASE_URL}/fluvio/api/events`;
 
@@ -23,25 +21,6 @@ export function useLiveStats() {
     let reconnectTimer: number | null = null;
 
     const connect = () => {
-      if (USE_MOCK) {
-        // Mock SSE Connection Simulation
-        setConnected(true);
-        const sendUpdate = () => {
-          if (!active) return;
-          const stats = generateLiveStats();
-          dataRef.current = stats;
-          setData(stats);
-        };
-
-        sendUpdate();
-        const intervalId = window.setInterval(sendUpdate, 5000);
-
-        return () => {
-          window.clearInterval(intervalId);
-        };
-      }
-
-      // Real SSE Connection
       try {
         eventSource = new EventSource(SSE_URL);
 
@@ -72,7 +51,6 @@ export function useLiveStats() {
             eventSource.close();
             eventSource = null;
           }
-          // Schedule reconnect in 3s
           reconnectTimer = window.setTimeout(() => {
             if (active) connect();
           }, 3000);
@@ -84,11 +62,9 @@ export function useLiveStats() {
           if (active) connect();
         }, 3000);
       }
-
-      return () => {};
     };
 
-    const cleanupMock = connect();
+    connect();
 
     return () => {
       active = false;
@@ -98,7 +74,6 @@ export function useLiveStats() {
       if (eventSource) {
         eventSource.close();
       }
-      cleanupMock();
     };
   }, []);
 
