@@ -1,47 +1,24 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getJobById, cancelJob } from '../api/jobs';
+import { useQuery } from '@tanstack/react-query';
+import { getJobById } from '../api/jobs';
+import { getApiErrorMessage } from '../api/client';
 import { JobStateBadge } from '../components/JobStateBadge';
 import { JsonViewer } from '../components/JsonViewer';
-import { useToast } from '../components/Toast';
 import { formatDateTime, formatRelativeTime } from '../lib/time';
-import { ArrowLeft, Ban, AlertCircle, Users, Tag } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Users, Tag } from 'lucide-react';
 
 export const JobDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const queryClient = useQueryClient();
-  const { showToast } = useToast();
-  
-  // Inline cancellation prompt state
-  const [confirmCancel, setConfirmCancel] = useState(false);
-
   const jobId = Number(id);
 
-  // 1. Fetch single job details
   const { data: job, isLoading, error } = useQuery({
     queryKey: ['job', jobId],
     queryFn: () => getJobById(jobId),
     refetchInterval: (query) => {
-      // Poll every 5s if state is running; otherwise stop polling
       const state = query.state.data?.state;
       return state === 'running' ? 5000 : false;
-    }
-  });
-
-  // 2. Cancellation Mutation
-  const cancelMutation = useMutation({
-    mutationFn: () => cancelJob(jobId),
-    onSuccess: () => {
-      showToast(`Job #${jobId} cancelled successfully`, 'success');
-      setConfirmCancel(false);
-      queryClient.invalidateQueries({ queryKey: ['job', jobId] });
-      queryClient.invalidateQueries({ queryKey: ['jobs'] });
     },
-    onError: (err: any) => {
-      showToast(err.info?.message || err.message || 'Failed to cancel job', 'error');
-      setConfirmCancel(false);
-    }
   });
 
   if (isLoading) {
@@ -63,16 +40,14 @@ export const JobDetail: React.FC = () => {
         </Link>
         <div className="flex items-center gap-3 p-4 border border-danger/20 bg-danger/5 text-danger font-mono text-xs rounded-[4px]">
           <AlertCircle size={16} />
-          <span>Error loading job: {(error as any)?.info?.message || error?.message || 'Job not found'}</span>
+          <span>Error loading job: {getApiErrorMessage(error, 'Job not found')}</span>
         </div>
       </div>
     );
   }
 
-  // Check if job is cancelable (pending or scheduled)
-  const isCancelable = job.state === 'pending' || job.state === 'scheduled';
+  const claimedBy = job.attempted_by.length > 0 ? job.attempted_by[job.attempted_by.length - 1] : null;
 
-  // Format relative timestamps
   const createdRelative = formatRelativeTime(job.created_at);
   const scheduledRelative = formatRelativeTime(job.scheduled_at);
   const attemptedRelative = formatRelativeTime(job.attempted_at);
@@ -80,58 +55,22 @@ export const JobDetail: React.FC = () => {
 
   return (
     <div className="space-y-6 flex-1 flex flex-col justify-start">
-      {/* Detail Header / Nav */}
       <div className="flex flex-col gap-4 border-b border-darkBorder pb-4">
-        <Link 
-          to="/jobs" 
+        <Link
+          to="/jobs"
           className="inline-flex items-center gap-2 text-xs text-textMuted hover:text-textPrimary transition-colors"
         >
           <ArrowLeft size={14} /> Back to jobs
         </Link>
-        
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-lg font-bold text-textPrimary uppercase tracking-wide flex items-center gap-2">
-              Job <span className="text-textMuted font-normal">#{job.id}</span>
-            </h1>
-            <p className="text-xs text-textMuted mt-0.5 font-mono">{job.kind}</p>
-          </div>
-          
-          {/* Inline Cancel Button flow */}
-          {isCancelable && (
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              {confirmCancel ? (
-                <div className="flex items-center gap-2 border border-[#f59e0b]/40 bg-[#f59e0b]/5 px-3 py-1.5 rounded-[4px] text-xs">
-                  <span className="text-[#f59e0b] font-bold">Are you sure?</span>
-                  <button
-                    onClick={() => cancelMutation.mutate()}
-                    disabled={cancelMutation.isPending}
-                    className="px-2 py-0.5 border border-[#ef4444]/40 bg-[#ef4444]/10 hover:bg-[#ef4444]/20 text-danger rounded-[2px]"
-                  >
-                    Yes
-                  </button>
-                  <button
-                    onClick={() => setConfirmCancel(false)}
-                    disabled={cancelMutation.isPending}
-                    className="px-2 py-0.5 border border-darkBorder bg-darkSurface hover:bg-darkSurface/80 text-textPrimary rounded-[2px]"
-                  >
-                    No
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setConfirmCancel(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-danger/40 bg-danger/5 hover:bg-danger/10 text-danger rounded-[4px] text-xs transition-colors duration-150"
-                >
-                  <Ban size={14} /> Cancel job
-                </button>
-              )}
-            </div>
-          )}
+
+        <div>
+          <h1 className="text-lg font-bold text-textPrimary uppercase tracking-wide flex items-center gap-2">
+            Job <span className="text-textMuted font-normal">#{job.id}</span>
+          </h1>
+          <p className="text-xs text-textMuted mt-0.5 font-mono">{job.kind}</p>
         </div>
       </div>
 
-      {/* Grid of properties */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border border-darkBorder bg-darkSurface/10 p-4 rounded-[4px]">
         <div className="space-y-1.5 text-xs font-mono">
           <div className="text-[10px] text-textMuted uppercase">Kind</div>
@@ -163,6 +102,12 @@ export const JobDetail: React.FC = () => {
             {job.unique_key || '—'}
           </div>
         </div>
+        {claimedBy && (
+          <div className="space-y-1.5 text-xs font-mono">
+            <div className="text-[10px] text-textMuted uppercase">Claimed By</div>
+            <div className="text-accent font-semibold">{claimedBy}</div>
+          </div>
+        )}
         <div className="space-y-1.5 text-xs font-mono">
           <div className="text-[10px] text-textMuted uppercase">Created</div>
           <div className="text-textPrimary font-semibold cursor-help" title={formatDateTime(job.created_at)}>
@@ -191,9 +136,7 @@ export const JobDetail: React.FC = () => {
         )}
       </div>
 
-      {/* Workers and Tags */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Workers List */}
         <div className="border border-darkBorder bg-darkSurface/20 p-4 rounded-[4px] flex flex-col justify-start">
           <div className="flex items-center gap-1.5 text-[10px] text-textMuted uppercase font-bold mb-3">
             <Users size={12} />
@@ -203,16 +146,23 @@ export const JobDetail: React.FC = () => {
             <div className="text-xs text-textMuted italic font-mono">No workers assigned yet</div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              {job.attempted_by.map((worker) => (
-                <span key={worker} className="px-2 py-1 bg-darkSurface border border-darkBorder text-textPrimary text-xs rounded-[4px] font-mono">
+              {job.attempted_by.map((worker, index) => (
+                <span
+                  key={`${worker}-${index}`}
+                  className={`px-2 py-1 border text-xs rounded-[4px] font-mono ${
+                    index === job.attempted_by.length - 1
+                      ? 'bg-accent/10 border-accent/30 text-accent'
+                      : 'bg-darkSurface border-darkBorder text-textPrimary'
+                  }`}
+                >
                   {worker}
+                  {index === job.attempted_by.length - 1 && ' (current)'}
                 </span>
               ))}
             </div>
           )}
         </div>
 
-        {/* Tags List */}
         <div className="border border-darkBorder bg-darkSurface/20 p-4 rounded-[4px] flex flex-col justify-start">
           <div className="flex items-center gap-1.5 text-[10px] text-textMuted uppercase font-bold mb-3">
             <Tag size={12} />
@@ -223,7 +173,10 @@ export const JobDetail: React.FC = () => {
           ) : (
             <div className="flex flex-wrap gap-2">
               {job.tags.map((tag) => (
-                <span key={tag} className="px-2 py-0.5 bg-[#141d17] border border-[#22c55e]/20 text-accent text-xs rounded-[4px] font-mono">
+                <span
+                  key={tag}
+                  className="px-2 py-0.5 bg-[#141d17] border border-[#22c55e]/20 text-accent text-xs rounded-[4px] font-mono"
+                >
                   {tag}
                 </span>
               ))}
@@ -232,19 +185,16 @@ export const JobDetail: React.FC = () => {
         </div>
       </div>
 
-      {/* ARGS pretty print */}
       <div className="space-y-2">
         <div className="text-[10px] text-textMuted uppercase font-bold tracking-wider font-mono">Job Arguments</div>
         <JsonViewer data={job.args} />
       </div>
 
-      {/* METADATA pretty print */}
       <div className="space-y-2">
         <div className="text-[10px] text-textMuted uppercase font-bold tracking-wider font-mono">Job Metadata</div>
         <JsonViewer data={job.metadata} />
       </div>
 
-      {/* ERROR TRACES */}
       <div className="space-y-3">
         <div className="text-[10px] text-textMuted uppercase font-bold tracking-wider font-mono">Error Trace History</div>
         {!job.error_trace || job.error_trace.length === 0 ? (
@@ -253,7 +203,6 @@ export const JobDetail: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Newest trace first */}
             {[...job.error_trace]
               .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
               .map((trace, idx) => (

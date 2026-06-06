@@ -1,4 +1,4 @@
-import type { ErrorTrace, Job, JobState, LiveStats, QueueStats } from './types';
+import type { ErrorTrace, Job, JobState, LiveStats, QueueStats, WorkerInstance } from './types';
 
 type BackendQueueStats = {
   queue: string;
@@ -27,8 +27,8 @@ type BackendJob = {
   queue?: string;
   Kind?: string;
   kind?: string;
-  Args?: Record<string, unknown>;
-  args?: Record<string, unknown>;
+  Args?: Record<string, unknown> | string;
+  args?: Record<string, unknown> | string;
   State?: string;
   state?: JobState;
   Priority?: number;
@@ -47,15 +47,49 @@ type BackendJob = {
   finalized_at?: string | null;
   CreatedAt?: string;
   created_at?: string;
-  ErrorTrace?: BackendErrorTrace[] | null;
-  error_trace?: ErrorTrace[] | null;
+  ErrorTrace?: BackendErrorTrace[] | string | null;
+  error_trace?: ErrorTrace[] | string | null;
   Tags?: string[];
   tags?: string[];
   UniqueKey?: string | null;
   unique_key?: string | null;
-  Metadata?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  Metadata?: Record<string, unknown> | string;
+  metadata?: Record<string, unknown> | string;
 };
+
+type BackendWorker = {
+  ID?: string;
+  id?: string;
+  Queues?: Record<string, number>;
+  queues?: Record<string, number>;
+  StartedAt?: string;
+  started_at?: string;
+  LastSeen?: string;
+  last_seen?: string;
+};
+
+type BackendJobsPage = {
+  jobs?: BackendJob[];
+  Jobs?: BackendJob[];
+  limit?: number;
+  Limit?: number;
+  offset?: number;
+  Offset?: number;
+  has_more?: boolean;
+  HasMore?: boolean;
+};
+
+function parseJsonField<T>(value: T | string | null | undefined, fallback: T): T {
+  if (value == null) return fallback;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return value;
+}
 
 function transformErrorTrace(raw: BackendErrorTrace): ErrorTrace {
   return {
@@ -65,12 +99,26 @@ function transformErrorTrace(raw: BackendErrorTrace): ErrorTrace {
   };
 }
 
+function transformErrorTraceList(raw: BackendJob['error_trace'] | BackendJob['ErrorTrace']): ErrorTrace[] | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as BackendErrorTrace[];
+      return Array.isArray(parsed) ? parsed.map(transformErrorTrace) : null;
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(raw)) return null;
+  return (raw as BackendErrorTrace[]).map(transformErrorTrace);
+}
+
 export function transformJob(raw: BackendJob): Job {
   return {
     id: raw.id ?? raw.ID ?? 0,
     queue: raw.queue ?? raw.Queue ?? '',
     kind: raw.kind ?? raw.Kind ?? '',
-    args: raw.args ?? raw.Args ?? {},
+    args: parseJsonField<Record<string, unknown>>(raw.args ?? raw.Args, {}),
     state: (raw.state ?? raw.State ?? 'pending') as JobState,
     priority: raw.priority ?? raw.Priority ?? 0,
     attempt: raw.attempt ?? raw.Attempt ?? 0,
@@ -80,49 +128,26 @@ export function transformJob(raw: BackendJob): Job {
     attempted_at: raw.attempted_at ?? raw.AttemptedAt ?? null,
     finalized_at: raw.finalized_at ?? raw.FinalizedAt ?? null,
     created_at: raw.created_at ?? raw.CreatedAt ?? '',
-    error_trace: (raw.error_trace ?? raw.ErrorTrace)?.map(transformErrorTrace) ?? null,
+    error_trace: transformErrorTraceList(raw.error_trace ?? raw.ErrorTrace),
     tags: raw.tags ?? raw.Tags ?? [],
     unique_key: raw.unique_key ?? raw.UniqueKey ?? null,
-    metadata: raw.metadata ?? raw.Metadata ?? {},
+    metadata: parseJsonField<Record<string, unknown>>(raw.metadata ?? raw.Metadata, {}),
   };
 }
 
-type BackendJobsPage = {
-  jobs?: BackendJob[];
-  Jobs?: BackendJob[];
-  total?: number;
-  Total?: number;
-};
-
-export function transformJobsResponse(
-  raw: BackendJob[] | BackendJobsPage,
-  options?: { total?: number; limit?: number; offset?: number },
-): { jobs: Job[]; total: number } {
-  const limit = options?.limit;
-  const offset = options?.offset ?? 0;
-
-  if (!Array.isArray(raw)) {
-    const page = raw.jobs ?? raw.Jobs ?? [];
-    const jobs = page.map(transformJob);
-    const total = options?.total ?? raw.total ?? raw.Total ?? jobs.length;
-    return { jobs, total };
-  }
-
-  const allJobs = raw.map(transformJob);
-  const serverTotal = options?.total;
-
-  if (serverTotal !== undefined) {
-    return { jobs: allJobs, total: serverTotal };
-  }
-
-  if (limit !== undefined) {
-    return {
-      jobs: allJobs.slice(offset, offset + limit),
-      total: allJobs.length,
-    };
-  }
-
-  return { jobs: allJobs, total: allJobs.length };
+export function transformJobsPage(raw: BackendJobsPage): {
+  jobs: Job[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+} {
+  const jobs = (raw.jobs ?? raw.Jobs ?? []).map(transformJob);
+  return {
+    jobs,
+    limit: raw.limit ?? raw.Limit ?? jobs.length,
+    offset: raw.offset ?? raw.Offset ?? 0,
+    has_more: raw.has_more ?? raw.HasMore ?? false,
+  };
 }
 
 export function transformQueueStats(raw: BackendQueueStats): QueueStats {
@@ -132,6 +157,8 @@ export function transformQueueStats(raw: BackendQueueStats): QueueStats {
     running: raw.running,
     scheduled: raw.scheduled,
     dead: raw.dead,
+    completed: raw.completed ?? 0,
+    failed: raw.failed ?? 0,
     paused: raw.paused,
   };
 }
@@ -140,37 +167,77 @@ export function transformQueues(raw: BackendQueueStats[]): QueueStats[] {
   return raw.map(transformQueueStats);
 }
 
+export function transformWorker(raw: BackendWorker): WorkerInstance {
+  return {
+    id: raw.id ?? raw.ID ?? '',
+    queues: raw.queues ?? raw.Queues ?? {},
+    started_at: raw.started_at ?? raw.StartedAt ?? '',
+    last_seen: raw.last_seen ?? raw.LastSeen ?? '',
+  };
+}
+
+export function transformWorkers(raw: BackendWorker[]): WorkerInstance[] {
+  return raw.map(transformWorker);
+}
+
+function sumQueueCounts(queues: BackendQueueStats[], field: 'completed' | 'failed'): number {
+  return queues.reduce((sum, q) => sum + (q[field] ?? 0), 0);
+}
+
+export type StatsSnapshot = {
+  completed: number;
+  failed: number;
+};
+
+export function snapshotQueueCounts(parsed: unknown): StatsSnapshot {
+  if (!Array.isArray(parsed)) {
+    return { completed: 0, failed: 0 };
+  }
+  return {
+    completed: sumQueueCounts(parsed as BackendQueueStats[], 'completed'),
+    failed: sumQueueCounts(parsed as BackendQueueStats[], 'failed'),
+  };
+}
+
 /**
  * Parses the SSE `stats` event payload into LiveStats.
- * The backend sends a queue array; throughput and worker fields are derived when absent.
+ * Throughput and error rate are derived from count deltas between SSE ticks (~5s).
  */
-export function parseStatsEvent(data: string): LiveStats {
+export function parseStatsEvent(
+  data: string,
+  previous?: StatsSnapshot,
+  intervalSeconds = 5,
+): LiveStats {
   const parsed: unknown = JSON.parse(data);
 
-  if (Array.isArray(parsed)) {
-    const queues = transformQueues(parsed as BackendQueueStats[]);
-    const completed = (parsed as BackendQueueStats[]).reduce(
-      (sum, q) => sum + (q.completed ?? 0),
-      0,
-    );
-    const failed = (parsed as BackendQueueStats[]).reduce(
-      (sum, q) => sum + (q.failed ?? 0),
-      0,
-    );
-
+  if (!Array.isArray(parsed)) {
+    const stats = parsed as LiveStats;
     return {
-      queues,
-      throughput_per_min: completed,
-      error_rate_per_min: failed,
-      workers_online: 0,
+      ...stats,
+      queues: stats.queues.map((q) =>
+        'queue' in q ? transformQueueStats(q as unknown as BackendQueueStats) : q,
+      ),
     };
   }
 
-  const stats = parsed as LiveStats;
+  const queues = transformQueues(parsed as BackendQueueStats[]);
+  const snapshot = snapshotQueueCounts(parsed);
+
+  let throughput_per_min = 0;
+  let error_rate_per_min = 0;
+
+  if (previous) {
+    const completedDelta = Math.max(0, snapshot.completed - previous.completed);
+    const failedDelta = Math.max(0, snapshot.failed - previous.failed);
+    const scale = 60 / intervalSeconds;
+    throughput_per_min = Math.round(completedDelta * scale);
+    error_rate_per_min = Math.round(failedDelta * scale);
+  }
+
   return {
-    ...stats,
-    queues: stats.queues.map((q) =>
-      'queue' in q ? transformQueueStats(q as unknown as BackendQueueStats) : q,
-    ),
+    queues,
+    throughput_per_min,
+    error_rate_per_min,
+    workers_online: 0,
   };
 }

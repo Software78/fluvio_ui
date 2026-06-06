@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getQueues, pauseQueue, resumeQueue } from '../api/queues';
+import { getApiErrorMessage } from '../api/client';
 import { useToast } from '../components/Toast';
 import type { QueueStats } from '../api/types';
 import { AlertCircle, Pause, Play } from 'lucide-react';
@@ -52,7 +53,7 @@ export const Queues: React.FC = () => {
       
       const action = variables.pause ? 'pause' : 'resume';
       showToast(
-        err.info?.message || err.message || `Failed to ${action} queue: ${variables.name}`,
+        getApiErrorMessage(err, `Failed to ${action} queue: ${variables.name}`),
         'error'
       );
     },
@@ -76,7 +77,7 @@ export const Queues: React.FC = () => {
       {error && (
         <div className="flex items-center gap-3 p-4 border border-danger/20 bg-danger/5 text-danger font-mono text-xs rounded-[4px]">
           <AlertCircle size={16} />
-          <span>Error loading queues: {(error as any).info?.message || error.message}</span>
+          <span>Error loading queues: {getApiErrorMessage(error)}</span>
         </div>
       )}
 
@@ -90,6 +91,8 @@ export const Queues: React.FC = () => {
                 <th className="px-4 py-3 font-semibold text-right w-[110px]">Pending</th>
                 <th className="px-4 py-3 font-semibold text-right w-[110px]">Running</th>
                 <th className="px-4 py-3 font-semibold text-right w-[110px]">Scheduled</th>
+                <th className="px-4 py-3 font-semibold text-right w-[110px]">Completed</th>
+                <th className="px-4 py-3 font-semibold text-right w-[110px]">Failed</th>
                 <th className="px-4 py-3 font-semibold text-right w-[110px]">Dead</th>
                 <th className="px-4 py-3 font-semibold text-right w-[120px]">Status</th>
                 <th className="px-4 py-3 font-semibold text-center w-[120px]">Action</th>
@@ -98,14 +101,14 @@ export const Queues: React.FC = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-textMuted font-mono">
+                  <td colSpan={9} className="px-4 py-8 text-center text-textMuted font-mono">
                     <span className="inline-block w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin mr-2 align-middle" />
                     Fetching queues telemetry...
                   </td>
                 </tr>
               ) : queues?.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-textMuted font-mono">
+                  <td colSpan={9} className="px-4 py-8 text-center text-textMuted font-mono">
                     No active queues registered.
                   </td>
                 </tr>
@@ -121,7 +124,11 @@ export const Queues: React.FC = () => {
                     <td className="px-4 py-3 text-right text-textPrimary">{queue.pending}</td>
                     <td className="px-4 py-3 text-right text-textPrimary">{queue.running}</td>
                     <td className="px-4 py-3 text-right text-textPrimary">{queue.scheduled}</td>
-                    
+                    <td className="px-4 py-3 text-right text-textMuted">{queue.completed}</td>
+                    <td className={`px-4 py-3 text-right ${queue.failed > 0 ? 'text-[#f59e0b]' : 'text-textMuted'}`}>
+                      {queue.failed}
+                    </td>
+
                     {/* Dead column highlights links if > 0 */}
                     <td className="px-4 py-3 text-right">
                       {queue.dead > 0 ? (

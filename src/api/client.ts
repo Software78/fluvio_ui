@@ -1,16 +1,20 @@
 export interface ApiError extends Error {
   status?: number;
-  info?: { message?: string } | string;
+  info?: { error?: string; message?: string } | string;
 }
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const API_PREFIX = `${BASE_URL}/fluvio/api`;
 
-function parseTotalCountHeader(response: Response): number | undefined {
-  const value = response.headers.get('X-Total-Count');
-  if (!value) return undefined;
-  const total = Number.parseInt(value, 10);
-  return Number.isFinite(total) ? total : undefined;
+/** Extract a human-readable message from an API error payload. */
+export function getApiErrorMessage(error: unknown, fallback = 'Request failed'): string {
+  if (!error || typeof error !== 'object') return fallback;
+  const apiError = error as ApiError;
+  if (typeof apiError.info === 'string') return apiError.info;
+  if (apiError.info && typeof apiError.info === 'object') {
+    return apiError.info.error ?? apiError.info.message ?? apiError.message ?? fallback;
+  }
+  return apiError.message ?? fallback;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -27,6 +31,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
         error.info = 'Unknown API error';
       }
     }
+    error.message = getApiErrorMessage(error);
     throw error;
   }
 
@@ -52,27 +57,4 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
   });
 
   return handleResponse<T>(response);
-}
-
-/**
- * Like request(), but also surfaces pagination total from headers or body metadata.
- */
-export async function requestWithTotal<T>(
-  path: string,
-  options?: RequestInit,
-): Promise<{ data: T; total?: number }> {
-  const url = `${API_PREFIX}${path}`;
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-
-  const total = parseTotalCountHeader(response);
-  const data = await handleResponse<T>(response);
-
-  return { data, total };
 }

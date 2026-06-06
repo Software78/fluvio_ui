@@ -47,6 +47,18 @@ export const Shell: React.FC<ShellProps> = ({ children, connected, workersOnline
               Jobs
             </NavLink>
             <NavLink
+              to="/workers"
+              className={({ isActive }) =>
+                `text-xs px-3 py-1.5 border rounded-[4px] transition-all duration-150 ${
+                  isActive
+                    ? 'border-darkBorder bg-darkSurface text-textPrimary font-medium'
+                    : 'border-transparent text-textMuted hover:text-textPrimary hover:bg-darkSurface/30'
+                }`
+              }
+            >
+              Workers
+            </NavLink>
+            <NavLink
               to="/queues"
               className={({ isActive }) =>
                 `text-xs px-3 py-1.5 border rounded-[4px] transition-all duration-150 ${

@@ -39,12 +39,28 @@ export type QueueStats = {
   running: number;
   scheduled: number;
   dead: number;
+  completed: number;
+  failed: number;
   paused: boolean;
+};
+
+export type JobsPage = {
+  jobs: Job[];
+  limit: number;
+  offset: number;
+  has_more: boolean;
+};
+
+export type WorkerInstance = {
+  id: string;
+  queues: Record<string, number>;
+  started_at: string;
+  last_seen: string;
 };
 
 export type LiveStats = {
   queues: QueueStats[];
-  throughput_per_min: number; // jobs completed in last 60s
-  error_rate_per_min: number; // jobs failed in last 60s
+  throughput_per_min: number;
+  error_rate_per_min: number;
   workers_online: number;
 };

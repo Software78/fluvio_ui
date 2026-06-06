@@ -1,14 +1,15 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { Shell } from "./components/Shell";
 import { ToastProvider } from "./components/Toast";
 import { LiveStatsProvider, useLiveStatsContext } from "./context/LiveStatsContext";
+import { getWorkers } from "./api/workers";
 import { Dashboard } from "./pages/Dashboard";
 import { JobDetail } from "./pages/JobDetail";
 import { Jobs } from "./pages/Jobs";
 import { Queues } from "./pages/Queues";
+import { Workers } from "./pages/Workers";
 
-// Configure React Query Client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -18,12 +19,17 @@ const queryClient = new QueryClient({
   },
 });
 
-/**
- * Renders the primary routes wrapped in the live telemetry header shell.
- */
 function AppContent() {
-  const { data, connected } = useLiveStatsContext();
-  const workersOnline = data?.workers_online ?? 0;
+  const { connected } = useLiveStatsContext();
+
+  const { data: workers } = useQuery({
+    queryKey: ['workers'],
+    queryFn: getWorkers,
+    refetchInterval: 10000,
+    retry: 1,
+  });
+
+  const workersOnline = workers?.length ?? 0;
 
   return (
     <Shell connected={connected} workersOnline={workersOnline}>
@@ -33,6 +39,7 @@ function AppContent() {
         <Route path="/jobs" element={<Jobs />} />
         <Route path="/jobs/:id" element={<JobDetail />} />
         <Route path="/queues" element={<Queues />} />
+        <Route path="/workers" element={<Workers />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Shell>

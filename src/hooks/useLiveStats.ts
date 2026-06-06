@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { parseStatsEvent } from '../api/transforms';
+import { parseStatsEvent, type StatsSnapshot } from '../api/transforms';
 import type { LiveStats } from '../api/types';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const SSE_URL = `${BASE_URL}/fluvio/api/events`;
+const SSE_INTERVAL_SECONDS = 5;
 
 /**
  * Custom hook to connect to the Server-Sent Events stream at /fluvio/api/events.
@@ -14,6 +15,7 @@ export function useLiveStats() {
   const [data, setData] = useState<LiveStats | null>(null);
   const [connected, setConnected] = useState(false);
   const dataRef = useRef<LiveStats | null>(null);
+  const snapshotRef = useRef<StatsSnapshot | undefined>(undefined);
 
   useEffect(() => {
     let active = true;
@@ -33,7 +35,15 @@ export function useLiveStats() {
         const handleStats = (event: MessageEvent) => {
           if (!active) return;
           try {
-            const stats = parseStatsEvent(event.data);
+            const stats = parseStatsEvent(
+              event.data,
+              snapshotRef.current,
+              SSE_INTERVAL_SECONDS,
+            );
+            snapshotRef.current = {
+              completed: stats.queues.reduce((sum, q) => sum + q.completed, 0),
+              failed: stats.queues.reduce((sum, q) => sum + q.failed, 0),
+            };
             dataRef.current = stats;
             setData(stats);
           } catch (e) {

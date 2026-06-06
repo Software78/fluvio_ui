@@ -1,11 +1,12 @@
-import { request, requestWithTotal } from './client';
-import { transformJob, transformJobsResponse } from './transforms';
-import type { Job, JobState } from './types';
+import { request } from './client';
+import { transformJob, transformJobsPage } from './transforms';
+import type { Job, JobState, JobsPage } from './types';
 
-export const DEFAULT_JOBS_PAGE_SIZE = 25;
+export const DEFAULT_JOBS_PAGE_SIZE = 50;
+export const MAX_JOBS_PAGE_SIZE = 100;
 
 /**
- * Fetch a list of jobs, optionally filtered by queue, state, and kind.
+ * Fetch a paginated list of jobs, optionally filtered by queue, state, and kind.
  */
 export async function getJobs(params: {
   queue?: string;
@@ -13,8 +14,8 @@ export async function getJobs(params: {
   kind?: string;
   limit?: number;
   offset?: number;
-}): Promise<{ jobs: Job[]; total: number }> {
-  const limit = params.limit ?? DEFAULT_JOBS_PAGE_SIZE;
+}): Promise<JobsPage> {
+  const limit = Math.min(params.limit ?? DEFAULT_JOBS_PAGE_SIZE, MAX_JOBS_PAGE_SIZE);
   const offset = params.offset ?? 0;
 
   const queryParams = new URLSearchParams();
@@ -24,11 +25,11 @@ export async function getJobs(params: {
   queryParams.set('limit', limit.toString());
   queryParams.set('offset', offset.toString());
 
-  const { data, total } = await requestWithTotal<Parameters<typeof transformJobsResponse>[0]>(
+  const raw = await request<Parameters<typeof transformJobsPage>[0]>(
     `/jobs?${queryParams.toString()}`,
   );
 
-  return transformJobsResponse(data, { total, limit, offset });
+  return transformJobsPage(raw);
 }
 
 /**
@@ -37,13 +38,4 @@ export async function getJobs(params: {
 export async function getJobById(id: number): Promise<Job> {
   const raw = await request<Parameters<typeof transformJob>[0]>(`/jobs/${id}`);
   return transformJob(raw);
-}
-
-/**
- * Cancel a pending or scheduled job.
- */
-export async function cancelJob(id: number): Promise<{ ok: boolean }> {
-  return request<{ ok: boolean }>(`/jobs/${id}/cancel`, {
-    method: 'POST',
-  });
 }
