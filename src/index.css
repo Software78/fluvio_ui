@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #0a0a0b;
+    color: #e8e8ea;
+    font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Custom input styles for monospace look */
+  input, select, textarea {
+    @apply bg-darkSurface border border-darkBorder text-textPrimary rounded-[4px] px-3 py-1.5 outline-none focus:border-accent font-mono text-sm;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0b;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e1e22;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #22c55e;
+}
+
+/* Subtle pulse animation for Live indicator */
+@keyframes indicator-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.95);
+  }
+}
+
+.pulse-indicator {
+  animation: indicator-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Hide default Recharts outline borders */
+.recharts-default-tooltip {
+  background-color: #111113 !important;
+  border: 1px solid #1e1e22 !important;
+  font-family: 'JetBrains Mono', 'IBM Plex Mono', monospace !important;
+}
