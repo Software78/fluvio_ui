@@ -3,15 +3,12 @@ export interface ApiError extends Error {
   info?: { error?: string; message?: string } | string;
 }
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-const API_PREFIX = `${BASE_URL}/fluvio/api`;
-
-const BASIC_AUTH_USER = import.meta.env.VITE_API_BASIC_AUTH_USER || '';
-const BASIC_AUTH_PASSWORD = import.meta.env.VITE_API_BASIC_AUTH_PASSWORD || '';
+import { getApiPrefix, getBasicAuthCredentials } from '../config';
 
 function getAuthHeaders(): Record<string, string> {
-  if (BASIC_AUTH_USER && BASIC_AUTH_PASSWORD) {
-    const credentials = btoa(`${BASIC_AUTH_USER}:${BASIC_AUTH_PASSWORD}`);
+  const { user, password } = getBasicAuthCredentials();
+  if (user && password) {
+    const credentials = btoa(`${user}:${password}`);
     return { Authorization: `Basic ${credentials}` };
   }
   return {};
@@ -57,7 +54,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
  * Generic request wrapper for Fluvio REST API.
  */
 export async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = `${API_PREFIX}${path}`;
+  const url = `${getApiPrefix()}${path}`;
 
   const response = await fetch(url, {
     ...options,

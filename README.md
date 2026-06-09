@@ -30,7 +30,7 @@ Open http://localhost:5173. By default the UI calls `http://localhost:8080/fluvi
 
 | Variable | Required | Description |
 |---|---|---|
-| `VITE_API_BASE_URL` | No | Base URL of the Fluvio API server. Leave blank for same-origin (reverse-proxy setups). |
+| `VITE_API_BASE_URL` | No | Base URL of the Fluvio API server. Leave blank for same-origin (reverse-proxy setups). Used for local `npm run dev` / `npm run build`. |
 | `VITE_API_BASIC_AUTH_USER` | No | Username for HTTP basic auth on REST requests. |
 | `VITE_API_BASIC_AUTH_PASSWORD` | No | Password for HTTP basic auth on REST requests. |
 
@@ -38,17 +38,26 @@ Both basic-auth variables must be set for credentials to be sent.
 
 ### Docker
 
-```bash
-docker build \
-  --build-arg VITE_API_BASE_URL=https://api.example.com \
-  --build-arg VITE_API_BASIC_AUTH_USER=admin \
-  --build-arg VITE_API_BASIC_AUTH_PASSWORD=secret \
-  -t fluvio_ui .
+The published image reads API settings at **container start** from environment variables (no rebuild required):
 
-docker run -p 8081:80 fluvio_ui
+```bash
+docker run -p 8081:80 \
+  -e VITE_API_BASE_URL=https://api.example.com \
+  -e VITE_API_BASIC_AUTH_USER=admin \
+  -e VITE_API_BASIC_AUTH_PASSWORD=secret \
+  ghcr.io/software78/fluvio_ui:latest
 ```
 
-Images are also published to `ghcr.io/software78/fluvio_ui`.
+Leave `VITE_API_BASE_URL` unset for same-origin deployments behind a reverse proxy.
+
+To build locally:
+
+```bash
+docker build -t fluvio_ui .
+docker run -p 8081:80 -e VITE_API_BASE_URL=https://api.example.com fluvio_ui
+```
+
+Images are published to `ghcr.io/software78/fluvio_ui`.
 
 ## API endpoints
 
@@ -75,7 +84,7 @@ mux.Handle("/fluvio/", fluviui.Handler(client,
 ))
 ```
 
-Set `VITE_API_BASIC_AUTH_USER` and `VITE_API_BASIC_AUTH_PASSWORD` at build time so REST calls include an `Authorization` header.
+Set `VITE_API_BASIC_AUTH_USER` and `VITE_API_BASIC_AUTH_PASSWORD` (in `.env` for dev, or as Docker `-e` flags at runtime) so REST calls include an `Authorization` header.
 
 **SSE caveat:** the browser `EventSource` API cannot send custom headers. If your backend requires header-based basic auth, the Dashboard SSE stream will fail unless you:
 

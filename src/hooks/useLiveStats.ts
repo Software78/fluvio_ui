@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { getApiPrefix } from '../config';
 import { parseStatsEvent, type StatsSnapshot } from '../api/transforms';
 import type { LiveStats } from '../api/types';
-
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
-const SSE_URL = `${BASE_URL}/fluvio/api/events`;
 const SSE_INTERVAL_SECONDS = 5;
 
 /**
@@ -24,7 +22,7 @@ export function useLiveStats() {
 
     const connect = () => {
       try {
-        eventSource = new EventSource(SSE_URL);
+        eventSource = new EventSource(`${getApiPrefix()}/events`);
 
         eventSource.onopen = () => {
           if (active) {
