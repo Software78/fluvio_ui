@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { DEFAULT_JOBS_PAGE_SIZE, MAX_JOBS_PAGE_SIZE, getJobs } from '../api/jobs';
 import { getQueues } from '../api/queues';
 import { getApiErrorMessage } from '../api/client';
 import { JobStateBadge } from '../components/JobStateBadge';
+import { EnqueueJobModal } from '../components/EnqueueJobModal';
 import { useRelativeTime } from '../hooks/useRelativeTime';
 import { formatDateTime } from '../lib/time';
-import { AlertCircle, ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { AlertCircle, ChevronLeft, ChevronRight, Search, Plus, ScrollText } from 'lucide-react';
 import type { JobState } from '../api/types';
 
 const JOB_STATES: JobState[] = [
@@ -34,6 +35,7 @@ export const Jobs: React.FC = () => {
   const limit = PAGE_SIZE_OPTIONS.includes(limitParam) ? limitParam : DEFAULT_JOBS_PAGE_SIZE;
 
   const [kindInput, setKindInput] = useState(kindFilter);
+  const [enqueueOpen, setEnqueueOpen] = useState(false);
 
   const { data: queues } = useQuery({
     queryKey: ['queues'],
@@ -89,14 +91,46 @@ export const Jobs: React.FC = () => {
     setSearchParams(nextParams);
   };
 
+  const toggleDeadFilter = () => {
+    handleFilterChange('state', stateFilter === 'dead' ? '' : 'dead');
+  };
+
   return (
     <div className="space-y-6 flex-1 flex flex-col justify-start">
-      <div className="flex items-center justify-between border-b border-darkBorder pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-darkBorder pb-4">
         <div>
           <h1 className="text-lg font-bold text-textPrimary uppercase tracking-wide">Jobs Registry</h1>
           <p className="text-xs text-textMuted mt-0.5">Filter, inspect, and analyze queue executions</p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={toggleDeadFilter}
+            className={`px-2.5 py-1 text-[10px] font-bold border uppercase rounded-[4px] tracking-wider transition-colors ${
+              stateFilter === 'dead'
+                ? 'border-danger/40 bg-danger/10 text-danger'
+                : 'border-darkBorder text-textMuted hover:text-textPrimary hover:border-textMuted'
+            }`}
+          >
+            Dead
+          </button>
+          <Link
+            to="/dead"
+            className="px-2.5 py-1 text-[10px] font-bold border border-darkBorder text-textMuted hover:text-[#f59e0b] hover:border-[#f59e0b]/40 uppercase rounded-[4px] tracking-wider transition-colors"
+          >
+            Dead Letter Queue
+          </Link>
+          <button
+            type="button"
+            onClick={() => setEnqueueOpen(true)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border border-accent/40 bg-accent/5 hover:bg-accent/10 text-accent uppercase rounded-[4px] tracking-wider transition-colors"
+          >
+            <Plus size={10} /> New Job
+          </button>
+        </div>
       </div>
+
+      <EnqueueJobModal open={enqueueOpen} onClose={() => setEnqueueOpen(false)} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="flex flex-col">
@@ -168,20 +202,21 @@ export const Jobs: React.FC = () => {
                 <th className="px-4 py-3 font-semibold">Queue</th>
                 <th className="px-4 py-3 font-semibold w-[120px]">State</th>
                 <th className="px-4 py-3 font-semibold w-[100px]">Attempt</th>
+                <th className="px-4 py-3 font-semibold w-[60px] text-center">Logs</th>
                 <th className="px-4 py-3 font-semibold text-right">Scheduled At</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-textMuted font-mono">
+                  <td colSpan={7} className="px-4 py-8 text-center text-textMuted font-mono">
                     <span className="inline-block w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin mr-2 align-middle" />
                     Fetching jobs registry...
                   </td>
                 </tr>
               ) : jobs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-textMuted font-mono">
+                  <td colSpan={7} className="px-4 py-8 text-center text-textMuted font-mono">
                     No jobs found matching criteria.
                   </td>
                 </tr>
@@ -206,6 +241,19 @@ export const Jobs: React.FC = () => {
                         className={`px-4 py-3 ${attemptNearLimit ? 'text-[#f59e0b] font-semibold' : 'text-textPrimary'}`}
                       >
                         {job.attempt}/{job.max_attempts}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {job.logs && job.logs.length > 0 ? (
+                          <span
+                            className="inline-flex items-center gap-0.5 text-accent"
+                            title={`${job.logs.length} log ${job.logs.length === 1 ? 'entry' : 'entries'}`}
+                          >
+                            <ScrollText size={12} />
+                            <span className="text-[10px] font-bold">{job.logs.length}</span>
+                          </span>
+                        ) : (
+                          <span className="text-textMuted/40">—</span>
+                        )}
                       </td>
                       <td
                         className="px-4 py-3 text-right text-textMuted cursor-help"

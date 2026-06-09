@@ -5,10 +5,15 @@ import { ToastProvider } from "./components/Toast";
 import { LiveStatsProvider, useLiveStatsContext } from "./context/LiveStatsContext";
 import { getWorkers } from "./api/workers";
 import { Dashboard } from "./pages/Dashboard";
+import { DeadLetter } from "./pages/DeadLetter";
 import { JobDetail } from "./pages/JobDetail";
 import { Jobs } from "./pages/Jobs";
+import { Periodic } from "./pages/Periodic";
 import { Queues } from "./pages/Queues";
 import { Workers } from "./pages/Workers";
+import { Workflows } from "./pages/Workflows";
+import { WorkflowDetail } from "./pages/WorkflowDetail";
+import { Concurrency } from "./pages/Concurrency";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +45,11 @@ function AppContent() {
         <Route path="/jobs/:id" element={<JobDetail />} />
         <Route path="/queues" element={<Queues />} />
         <Route path="/workers" element={<Workers />} />
+        <Route path="/dead" element={<DeadLetter />} />
+        <Route path="/periodic" element={<Periodic />} />
+        <Route path="/workflows" element={<Workflows />} />
+        <Route path="/workflows/:id" element={<WorkflowDetail />} />
+        <Route path="/concurrency" element={<Concurrency />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Shell>

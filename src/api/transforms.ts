@@ -1,4 +1,17 @@
-import type { ErrorTrace, Job, JobState, LiveStats, QueueStats, WorkerInstance } from './types';
+import type {
+  ConcurrencySlot,
+  ErrorTrace,
+  Job,
+  JobLogEntry,
+  JobState,
+  LiveStats,
+  PeriodicJob,
+  QueueDetail,
+  QueueStats,
+  Workflow,
+  WorkflowTask,
+  WorkerInstance,
+} from './types';
 
 type BackendQueueStats = {
   queue: string;
@@ -8,6 +21,7 @@ type BackendQueueStats = {
   dead: number;
   completed?: number;
   failed?: number;
+  cancelled?: number;
   paused: boolean;
 };
 
@@ -18,6 +32,17 @@ type BackendErrorTrace = {
   error?: string;
   At?: string;
   at?: string;
+};
+
+type BackendJobLogEntry = {
+  At?: string;
+  at?: string;
+  Level?: string;
+  level?: string;
+  Message?: string;
+  message?: string;
+  Data?: Record<string, unknown> | string;
+  data?: Record<string, unknown> | string;
 };
 
 type BackendJob = {
@@ -45,10 +70,14 @@ type BackendJob = {
   attempted_at?: string | null;
   FinalizedAt?: string | null;
   finalized_at?: string | null;
+  DiedAt?: string | null;
+  died_at?: string | null;
   CreatedAt?: string;
   created_at?: string;
   ErrorTrace?: BackendErrorTrace[] | string | null;
   error_trace?: ErrorTrace[] | string | null;
+  Logs?: BackendJobLogEntry[] | string | null;
+  logs?: JobLogEntry[] | string | null;
   Tags?: string[];
   tags?: string[];
   UniqueKey?: string | null;
@@ -113,6 +142,30 @@ function transformErrorTraceList(raw: BackendJob['error_trace'] | BackendJob['Er
   return (raw as BackendErrorTrace[]).map(transformErrorTrace);
 }
 
+function transformJobLogEntry(raw: BackendJobLogEntry): JobLogEntry {
+  const dataRaw = raw.data ?? raw.Data;
+  return {
+    at: raw.at ?? raw.At ?? '',
+    level: raw.level ?? raw.Level ?? 'info',
+    message: raw.message ?? raw.Message ?? '',
+    data: dataRaw != null ? parseJsonField<Record<string, unknown>>(dataRaw, {}) : undefined,
+  };
+}
+
+function transformJobLogList(raw: BackendJob['logs'] | BackendJob['Logs']): JobLogEntry[] | null {
+  if (raw == null) return null;
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw) as BackendJobLogEntry[];
+      return Array.isArray(parsed) ? parsed.map(transformJobLogEntry) : null;
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(raw)) return null;
+  return (raw as BackendJobLogEntry[]).map(transformJobLogEntry);
+}
+
 export function transformJob(raw: BackendJob): Job {
   return {
     id: raw.id ?? raw.ID ?? 0,
@@ -127,8 +180,10 @@ export function transformJob(raw: BackendJob): Job {
     scheduled_at: raw.scheduled_at ?? raw.ScheduledAt ?? '',
     attempted_at: raw.attempted_at ?? raw.AttemptedAt ?? null,
     finalized_at: raw.finalized_at ?? raw.FinalizedAt ?? null,
+    died_at: raw.died_at ?? raw.DiedAt ?? null,
     created_at: raw.created_at ?? raw.CreatedAt ?? '',
     error_trace: transformErrorTraceList(raw.error_trace ?? raw.ErrorTrace),
+    logs: transformJobLogList(raw.logs ?? raw.Logs),
     tags: raw.tags ?? raw.Tags ?? [],
     unique_key: raw.unique_key ?? raw.UniqueKey ?? null,
     metadata: parseJsonField<Record<string, unknown>>(raw.metadata ?? raw.Metadata, {}),
@@ -150,6 +205,147 @@ export function transformJobsPage(raw: BackendJobsPage): {
   };
 }
 
+export function transformDeadJobsPage(raw: BackendJobsPage) {
+  return transformJobsPage(raw);
+}
+
+type BackendPeriodicJob = {
+  Kind?: string;
+  kind?: string;
+  Cron?: string;
+  cron?: string;
+  Queue?: string;
+  queue?: string;
+  MaxAttempts?: number;
+  max_attempts?: number;
+  Args?: Record<string, unknown> | string;
+  args?: Record<string, unknown> | string;
+  NextRunAt?: string;
+  next_run_at?: string;
+  LastRunAt?: string | null;
+  last_run_at?: string | null;
+  Paused?: boolean;
+  paused?: boolean;
+};
+
+export function transformPeriodicJob(raw: BackendPeriodicJob): PeriodicJob {
+  return {
+    kind: raw.kind ?? raw.Kind ?? '',
+    cron: raw.cron ?? raw.Cron ?? '',
+    queue: raw.queue ?? raw.Queue ?? '',
+    max_attempts: raw.max_attempts ?? raw.MaxAttempts ?? 0,
+    args: parseJsonField<Record<string, unknown>>(raw.args ?? raw.Args, {}),
+    next_run_at: raw.next_run_at ?? raw.NextRunAt ?? '',
+    last_run_at: raw.last_run_at ?? raw.LastRunAt ?? null,
+    paused: raw.paused ?? raw.Paused ?? false,
+  };
+}
+
+export function transformPeriodicJobs(raw: BackendPeriodicJob[]): PeriodicJob[] {
+  return raw.map(transformPeriodicJob);
+}
+
+type BackendWorkflowTask = {
+  TaskID?: string;
+  task_id?: string;
+  State?: string;
+  state?: string;
+  DependsOn?: string[];
+  depends_on?: string[];
+  JobID?: number | null;
+  job_id?: number | null;
+};
+
+type BackendWorkflow = {
+  ID?: string;
+  id?: string;
+  State?: string;
+  state?: string;
+  Tasks?: BackendWorkflowTask[];
+  tasks?: BackendWorkflowTask[];
+  CreatedAt?: string;
+  created_at?: string;
+};
+
+type BackendWorkflowsPage = {
+  workflows?: BackendWorkflow[];
+  Workflows?: BackendWorkflow[];
+  limit?: number;
+  Limit?: number;
+  offset?: number;
+  Offset?: number;
+  has_more?: boolean;
+  HasMore?: boolean;
+};
+
+function transformWorkflowTask(raw: BackendWorkflowTask): WorkflowTask {
+  return {
+    task_id: raw.task_id ?? raw.TaskID ?? '',
+    state: raw.state ?? raw.State ?? '',
+    depends_on: raw.depends_on ?? raw.DependsOn ?? [],
+    job_id: raw.job_id ?? raw.JobID ?? null,
+  };
+}
+
+export function transformWorkflow(raw: BackendWorkflow): Workflow {
+  const tasks = (raw.tasks ?? raw.Tasks ?? []).map(transformWorkflowTask);
+  return {
+    id: raw.id ?? raw.ID ?? '',
+    state: raw.state ?? raw.State ?? '',
+    tasks,
+    created_at: raw.created_at ?? raw.CreatedAt ?? '',
+  };
+}
+
+export function transformWorkflowsPage(raw: BackendWorkflowsPage) {
+  const workflows = (raw.workflows ?? raw.Workflows ?? []).map(transformWorkflow);
+  return {
+    workflows,
+    limit: raw.limit ?? raw.Limit ?? workflows.length,
+    offset: raw.offset ?? raw.Offset ?? 0,
+    has_more: raw.has_more ?? raw.HasMore ?? false,
+  };
+}
+
+type BackendConcurrencySlot = {
+  Kind?: string;
+  kind?: string;
+  PartitionKey?: string;
+  partition_key?: string;
+  Running?: number;
+  running?: number;
+  MaxConcurrent?: number;
+  max_concurrent?: number;
+};
+
+export function transformConcurrencySlot(raw: BackendConcurrencySlot): ConcurrencySlot {
+  return {
+    kind: raw.kind ?? raw.Kind ?? '',
+    partition_key: raw.partition_key ?? raw.PartitionKey ?? '',
+    running: raw.running ?? raw.Running ?? 0,
+    max_concurrent: raw.max_concurrent ?? raw.MaxConcurrent ?? 0,
+  };
+}
+
+export function transformConcurrencySlots(raw: BackendConcurrencySlot[]): ConcurrencySlot[] {
+  return raw.map(transformConcurrencySlot);
+}
+
+type BackendQueueDetail = BackendQueueStats & {
+  WorkerInstances?: number;
+  worker_instances?: number;
+  WorkerCapacity?: number;
+  worker_capacity?: number;
+};
+
+export function transformQueueDetail(raw: BackendQueueDetail): QueueDetail {
+  return {
+    ...transformQueueStats(raw),
+    worker_instances: raw.worker_instances ?? raw.WorkerInstances ?? 0,
+    worker_capacity: raw.worker_capacity ?? raw.WorkerCapacity ?? 0,
+  };
+}
+
 export function transformQueueStats(raw: BackendQueueStats): QueueStats {
   return {
     name: raw.queue,
@@ -159,6 +355,7 @@ export function transformQueueStats(raw: BackendQueueStats): QueueStats {
     dead: raw.dead,
     completed: raw.completed ?? 0,
     failed: raw.failed ?? 0,
+    cancelled: raw.cancelled ?? 0,
     paused: raw.paused,
   };
 }

@@ -1,6 +1,6 @@
 import { request } from './client';
-import { transformQueues } from './transforms';
-import type { QueueStats } from './types';
+import { transformQueueDetail, transformQueues } from './transforms';
+import type { QueueDetail, QueueStats } from './types';
 
 /**
  * Fetch stats for all queues.
@@ -28,4 +28,11 @@ export async function resumeQueue(name: string): Promise<{ ok: boolean }> {
   return request<{ ok: boolean }>(`/queues/${name}/resume`, {
     method: 'POST',
   });
+}
+
+export async function getQueueDetail(name: string): Promise<QueueDetail> {
+  const raw = await request<Parameters<typeof transformQueueDetail>[0]>(
+    `/queues/${encodeURIComponent(name)}`,
+  );
+  return transformQueueDetail(raw);
 }

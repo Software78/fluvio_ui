@@ -1,73 +1,96 @@
-# React + TypeScript + Vite
+# Fluvio Console
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React admin dashboard for monitoring and operating [Fluvio](https://github.com/Software78/fluvio) job queues. Connects to the `fluviui` HTTP API exposed by your Fluvio backend.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Dashboard** — live queue telemetry via SSE, throughput and error-rate sparklines
+- **Jobs** — paginated listing with queue/state/kind filters and job detail view
+- **Queues** — per-queue stats with pause/resume controls
+- **Workers** — live fleet registry of processing clients
 
-## React Compiler
+## Quick start
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Prerequisites
 
-## Expanding the ESLint configuration
+- Node.js 22+
+- A running Fluvio backend with `fluviui.Handler` mounted (see [Fluvio README](https://github.com/Software78/fluvio#4-web-api))
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Development
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+cp .env .env.local   # optional — edit VITE_API_BASE_URL if needed
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open http://localhost:5173. By default the UI calls `http://localhost:8080/fluvio/api`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Environment variables
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Variable | Required | Description |
+|---|---|---|
+| `VITE_API_BASE_URL` | No | Base URL of the Fluvio API server. Leave blank for same-origin (reverse-proxy setups). |
+| `VITE_API_BASIC_AUTH_USER` | No | Username for HTTP basic auth on REST requests. |
+| `VITE_API_BASIC_AUTH_PASSWORD` | No | Password for HTTP basic auth on REST requests. |
+
+Both basic-auth variables must be set for credentials to be sent.
+
+### Docker
+
+```bash
+docker build \
+  --build-arg VITE_API_BASE_URL=https://api.example.com \
+  --build-arg VITE_API_BASIC_AUTH_USER=admin \
+  --build-arg VITE_API_BASIC_AUTH_PASSWORD=secret \
+  -t fluvio_ui .
+
+docker run -p 8081:80 fluvio_ui
 ```
+
+Images are also published to `ghcr.io/software78/fluvio_ui`.
+
+## API endpoints
+
+The UI consumes these `fluviui` routes (all prefixed with `/fluvio/api`):
+
+| Method | Path | Used by |
+|---|---|---|
+| `GET` | `/queues` | Dashboard, Queues, Jobs |
+| `POST` | `/queues/{name}/pause` | Queues |
+| `POST` | `/queues/{name}/resume` | Queues |
+| `GET` | `/jobs` | Jobs (supports `queue`, `state`, `kind`, `limit`, `offset`) |
+| `GET` | `/jobs/{id}` | Job detail |
+| `GET` | `/workers` | Workers, header worker count |
+| `GET` | `/events` | Dashboard SSE stream (`event: stats`, every 5s) |
+
+## Secured deployment
+
+Fluvio recommends protecting `fluviui.Handler` with middleware (e.g. basic auth):
+
+```go
+mux.Handle("/fluvio/", fluviui.Handler(client,
+    fluviui.WithAllowedOrigin("https://your-ui.example.com"),
+    fluviui.WithMiddleware(basicAuthMiddleware),
+))
+```
+
+Set `VITE_API_BASIC_AUTH_USER` and `VITE_API_BASIC_AUTH_PASSWORD` at build time so REST calls include an `Authorization` header.
+
+**SSE caveat:** the browser `EventSource` API cannot send custom headers. If your backend requires header-based basic auth, the Dashboard SSE stream will fail unless you:
+
+- Serve UI and API on the same origin behind a reverse proxy that handles authentication, or
+- Use cookie/session-based auth instead of header-based basic auth
+
+REST pages (Jobs, Queues, Workers) work with basic auth env vars; the Dashboard live stream may need additional proxy configuration.
+
+## Build
+
+```bash
+npm run build    # outputs to dist/
+npm run preview  # serve dist/ locally
+```
+
+## License
+
+Apache 2.0 — see the [Fluvio](https://github.com/Software78/fluvio) project for backend licensing.

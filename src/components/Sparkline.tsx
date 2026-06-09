@@ -3,22 +3,29 @@ import { LineChart, Line, ResponsiveContainer } from 'recharts';
 
 interface SparklineProps {
   data: number[];
+  label?: string;
+  color?: string;
+  emptyMessage?: string;
 }
 
-export const Sparkline: React.FC<SparklineProps> = ({ data }) => {
-  // Ensure we format data properly for Recharts
+export const Sparkline: React.FC<SparklineProps> = ({
+  data,
+  label = 'Sparkline (Last 20 ticks)',
+  color = '#22c55e',
+  emptyMessage = 'Waiting for live stream data...',
+}) => {
   const chartData = data.map((val, idx) => ({ index: idx, value: val }));
 
   return (
     <div className="w-full bg-[#0e0e10] border border-darkBorder rounded-[4px] p-4 flex flex-col justify-between">
       <div className="text-[10px] text-textMuted uppercase tracking-wider font-semibold font-mono mb-3">
-        Throughput Sparkline (Last 20 ticks)
+        {label}
       </div>
-      
+
       <div className="w-full h-[60px]">
         {data.length === 0 ? (
           <div className="w-full h-full flex items-center justify-center text-textMuted text-xs font-mono">
-            Waiting for live stream data...
+            {emptyMessage}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -26,7 +33,7 @@ export const Sparkline: React.FC<SparklineProps> = ({ data }) => {
               <Line
                 type="monotone"
                 dataKey="value"
-                stroke="#22c55e"
+                stroke={color}
                 strokeWidth={1.5}
                 dot={false}
                 isAnimationActive={false}

@@ -1,16 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getJobById } from '../api/jobs';
+import { cancelJob, retryJob } from '../api/jobActions';
+import { replayDeadJob } from '../api/dead';
 import { getApiErrorMessage } from '../api/client';
 import { JobStateBadge } from '../components/JobStateBadge';
 import { JsonViewer } from '../components/JsonViewer';
+import { JobLogs } from '../components/JobLogs';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { useToast } from '../components/Toast';
 import { formatDateTime, formatRelativeTime } from '../lib/time';
-import { ArrowLeft, AlertCircle, Users, Tag } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Users, Tag, Ban, RotateCcw, Play, ScrollText } from 'lucide-react';
 
 export const JobDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const jobId = Number(id);
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const [confirmAction, setConfirmAction] = useState<'cancel' | 'replay' | null>(null);
 
   const { data: job, isLoading, error } = useQuery({
     queryKey: ['job', jobId],
@@ -20,6 +28,52 @@ export const JobDetail: React.FC = () => {
       return state === 'running' ? 5000 : false;
     },
   });
+
+  const invalidateJobQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['job', jobId] });
+    queryClient.invalidateQueries({ queryKey: ['jobs'] });
+  };
+
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelJob(jobId),
+    onSuccess: () => {
+      showToast('Job cancelled', 'success');
+      invalidateJobQueries();
+      setConfirmAction(null);
+    },
+    onError: (err) => {
+      showToast(getApiErrorMessage(err, 'Failed to cancel job'), 'error');
+      setConfirmAction(null);
+    },
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: () => retryJob(jobId),
+    onSuccess: () => {
+      showToast('Job scheduled to run now', 'success');
+      invalidateJobQueries();
+    },
+    onError: (err) => {
+      showToast(getApiErrorMessage(err, 'Failed to retry job'), 'error');
+    },
+  });
+
+  const replayMutation = useMutation({
+    mutationFn: () => replayDeadJob(jobId),
+    onSuccess: () => {
+      showToast('Dead job replayed', 'success');
+      invalidateJobQueries();
+      queryClient.invalidateQueries({ queryKey: ['dead'] });
+      setConfirmAction(null);
+    },
+    onError: (err) => {
+      showToast(getApiErrorMessage(err, 'Failed to replay job'), 'error');
+      setConfirmAction(null);
+    },
+  });
+
+  const actionPending =
+    cancelMutation.isPending || retryMutation.isPending || replayMutation.isPending;
 
   if (isLoading) {
     return (
@@ -52,6 +106,7 @@ export const JobDetail: React.FC = () => {
   const scheduledRelative = formatRelativeTime(job.scheduled_at);
   const attemptedRelative = formatRelativeTime(job.attempted_at);
   const finalizedRelative = formatRelativeTime(job.finalized_at);
+  const diedRelative = formatRelativeTime(job.died_at);
 
   return (
     <div className="space-y-6 flex-1 flex flex-col justify-start">
@@ -63,13 +118,69 @@ export const JobDetail: React.FC = () => {
           <ArrowLeft size={14} /> Back to jobs
         </Link>
 
-        <div>
-          <h1 className="text-lg font-bold text-textPrimary uppercase tracking-wide flex items-center gap-2">
-            Job <span className="text-textMuted font-normal">#{job.id}</span>
-          </h1>
-          <p className="text-xs text-textMuted mt-0.5 font-mono">{job.kind}</p>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h1 className="text-lg font-bold text-textPrimary uppercase tracking-wide flex items-center gap-2">
+              Job <span className="text-textMuted font-normal">#{job.id}</span>
+            </h1>
+            <p className="text-xs text-textMuted mt-0.5 font-mono">{job.kind}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {(job.state === 'pending' || job.state === 'scheduled') && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction('cancel')}
+                disabled={actionPending}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border border-danger/40 bg-danger/5 hover:bg-danger/10 text-danger uppercase rounded-[4px] tracking-wider transition-colors disabled:opacity-40"
+              >
+                <Ban size={10} /> Cancel
+              </button>
+            )}
+            {job.state === 'scheduled' && (
+              <button
+                type="button"
+                onClick={() => retryMutation.mutate()}
+                disabled={actionPending}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border border-accent/40 bg-accent/5 hover:bg-accent/10 text-accent uppercase rounded-[4px] tracking-wider transition-colors disabled:opacity-40"
+              >
+                <Play size={10} /> Retry Now
+              </button>
+            )}
+            {job.state === 'dead' && (
+              <button
+                type="button"
+                onClick={() => setConfirmAction('replay')}
+                disabled={actionPending}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border border-[#f59e0b]/40 bg-[#f59e0b]/5 hover:bg-[#f59e0b]/10 text-[#f59e0b] uppercase rounded-[4px] tracking-wider transition-colors disabled:opacity-40"
+              >
+                <RotateCcw size={10} /> Replay
+              </button>
+            )}
+          </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmAction === 'cancel'}
+        title="Cancel Job"
+        message={`Cancel job #${job.id}? This cannot be undone.`}
+        confirmLabel="Cancel Job"
+        variant="danger"
+        loading={cancelMutation.isPending}
+        onConfirm={() => cancelMutation.mutate()}
+        onCancel={() => setConfirmAction(null)}
+      />
+
+      <ConfirmModal
+        open={confirmAction === 'replay'}
+        title="Replay Dead Job"
+        message={`Replay job #${job.id} from the dead letter queue? A new pending job will be created.`}
+        confirmLabel="Replay"
+        loading={replayMutation.isPending}
+        onConfirm={() => replayMutation.mutate()}
+        onCancel={() => setConfirmAction(null)}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border border-darkBorder bg-darkSurface/10 p-4 rounded-[4px]">
         <div className="space-y-1.5 text-xs font-mono">
@@ -134,6 +245,14 @@ export const JobDetail: React.FC = () => {
             </div>
           </div>
         )}
+        {job.state === 'dead' && job.died_at && (
+          <div className="space-y-1.5 text-xs font-mono">
+            <div className="text-[10px] text-textMuted uppercase font-mono">Died At</div>
+            <div className="text-[#f59e0b] font-semibold cursor-help" title={formatDateTime(job.died_at)}>
+              {diedRelative}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -193,6 +312,17 @@ export const JobDetail: React.FC = () => {
       <div className="space-y-2">
         <div className="text-[10px] text-textMuted uppercase font-bold tracking-wider font-mono">Job Metadata</div>
         <JsonViewer data={job.metadata} />
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center gap-1.5 text-[10px] text-textMuted uppercase font-bold tracking-wider font-mono">
+          <ScrollText size={12} />
+          <span>Execution Logs</span>
+          {job.logs && job.logs.length > 0 && (
+            <span className="text-accent font-normal normal-case">({job.logs.length})</span>
+          )}
+        </div>
+        <JobLogs logs={job.logs} />
       </div>
 
       <div className="space-y-3">

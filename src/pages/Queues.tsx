@@ -1,71 +1,72 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getQueues, pauseQueue, resumeQueue } from '../api/queues';
+import { getQueues, pauseQueue, resumeQueue, getQueueDetail } from '../api/queues';
 import { getApiErrorMessage } from '../api/client';
 import { useToast } from '../components/Toast';
+import { Drawer } from '../components/Drawer';
 import type { QueueStats } from '../api/types';
 import { AlertCircle, Pause, Play } from 'lucide-react';
 
 export const Queues: React.FC = () => {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
+  const [selectedQueue, setSelectedQueue] = useState<string | null>(null);
 
-  // 1. Fetch queues state with 5s polling
   const { data: queues, isLoading, error } = useQuery({
     queryKey: ['queues'],
     queryFn: getQueues,
-    refetchInterval: 5000 // Refetch every 5 seconds
+    refetchInterval: 5000,
   });
 
-  // 2. Pause/Resume Mutation with Optimistic UI updates
+  const { data: queueDetail, isLoading: detailLoading } = useQuery({
+    queryKey: ['queue', selectedQueue],
+    queryFn: () => getQueueDetail(selectedQueue!),
+    enabled: !!selectedQueue,
+  });
+
   const togglePauseMutation = useMutation({
     mutationFn: async ({ name, pause }: { name: string; pause: boolean }) => {
       if (pause) {
         return pauseQueue(name);
-      } else {
-        return resumeQueue(name);
       }
+      return resumeQueue(name);
     },
     onMutate: async ({ name, pause }) => {
-      // Cancel any outgoing refetches so they don't overwrite our optimistic update
       await queryClient.cancelQueries({ queryKey: ['queues'] });
 
-      // Snapshot the previous queues value
       const previousQueues = queryClient.getQueryData<QueueStats[]>(['queues']);
 
-      // Optimistically update local caches
       if (previousQueues) {
         queryClient.setQueryData<QueueStats[]>(
           ['queues'],
-          previousQueues.map((q) => (q.name === name ? { ...q, paused: pause } : q))
+          previousQueues.map((q) => (q.name === name ? { ...q, paused: pause } : q)),
         );
       }
 
-      // Return context containing previous value
       return { previousQueues };
     },
-    onError: (err: any, variables, context) => {
-      // Roll back to prior state on failure
+    onError: (err: unknown, variables, context) => {
       if (context?.previousQueues) {
         queryClient.setQueryData(['queues'], context.previousQueues);
       }
-      
+
       const action = variables.pause ? 'pause' : 'resume';
       showToast(
         getApiErrorMessage(err, `Failed to ${action} queue: ${variables.name}`),
-        'error'
+        'error',
       );
     },
     onSettled: () => {
-      // Invalidate queries to fetch truth from server
       queryClient.invalidateQueries({ queryKey: ['queues'] });
-    }
+      if (selectedQueue) {
+        queryClient.invalidateQueries({ queryKey: ['queue', selectedQueue] });
+      }
+    },
   });
 
   return (
     <div className="space-y-6 flex-1 flex flex-col justify-start">
-      {/* Title Header */}
       <div className="flex items-center justify-between border-b border-darkBorder pb-4">
         <div>
           <h1 className="text-lg font-bold text-textPrimary uppercase tracking-wide">Queues Controller</h1>
@@ -73,7 +74,6 @@ export const Queues: React.FC = () => {
         </div>
       </div>
 
-      {/* Error Alert Box */}
       {error && (
         <div className="flex items-center gap-3 p-4 border border-danger/20 bg-danger/5 text-danger font-mono text-xs rounded-[4px]">
           <AlertCircle size={16} />
@@ -81,7 +81,6 @@ export const Queues: React.FC = () => {
         </div>
       )}
 
-      {/* Queues Table */}
       <div className="border border-darkBorder bg-darkSurface/20 rounded-[4px] overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left font-mono text-xs border-collapse">
@@ -93,6 +92,7 @@ export const Queues: React.FC = () => {
                 <th className="px-4 py-3 font-semibold text-right w-[110px]">Scheduled</th>
                 <th className="px-4 py-3 font-semibold text-right w-[110px]">Completed</th>
                 <th className="px-4 py-3 font-semibold text-right w-[110px]">Failed</th>
+                <th className="px-4 py-3 font-semibold text-right w-[110px]">Cancelled</th>
                 <th className="px-4 py-3 font-semibold text-right w-[110px]">Dead</th>
                 <th className="px-4 py-3 font-semibold text-right w-[120px]">Status</th>
                 <th className="px-4 py-3 font-semibold text-center w-[120px]">Action</th>
@@ -101,14 +101,14 @@ export const Queues: React.FC = () => {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-textMuted font-mono">
+                  <td colSpan={10} className="px-4 py-8 text-center text-textMuted font-mono">
                     <span className="inline-block w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin mr-2 align-middle" />
                     Fetching queues telemetry...
                   </td>
                 </tr>
               ) : queues?.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-textMuted font-mono">
+                  <td colSpan={10} className="px-4 py-8 text-center text-textMuted font-mono">
                     No active queues registered.
                   </td>
                 </tr>
@@ -120,7 +120,15 @@ export const Queues: React.FC = () => {
                       queue.paused ? 'opacity-50 border-l-2 border-l-[#f59e0b]' : ''
                     }`}
                   >
-                    <td className="px-4 py-3 font-bold text-textPrimary">{queue.name}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedQueue(queue.name)}
+                        className="font-bold text-textPrimary hover:text-accent transition-colors text-left"
+                      >
+                        {queue.name}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-right text-textPrimary">{queue.pending}</td>
                     <td className="px-4 py-3 text-right text-textPrimary">{queue.running}</td>
                     <td className="px-4 py-3 text-right text-textPrimary">{queue.scheduled}</td>
@@ -128,14 +136,13 @@ export const Queues: React.FC = () => {
                     <td className={`px-4 py-3 text-right ${queue.failed > 0 ? 'text-[#f59e0b]' : 'text-textMuted'}`}>
                       {queue.failed}
                     </td>
-
-                    {/* Dead column highlights links if > 0 */}
+                    <td className="px-4 py-3 text-right text-textMuted">{queue.cancelled}</td>
                     <td className="px-4 py-3 text-right">
                       {queue.dead > 0 ? (
                         <Link
-                          to={`/jobs?queue=${queue.name}&state=dead`}
+                          to="/dead"
                           className="text-[#f59e0b] hover:underline font-bold"
-                          title="View dead jobs for this queue"
+                          title="View dead letter queue"
                         >
                           {queue.dead}
                         </Link>
@@ -143,15 +150,15 @@ export const Queues: React.FC = () => {
                         <span className="text-textMuted">{queue.dead}</span>
                       )}
                     </td>
-                    
                     <td className="px-4 py-3 text-right">
-                      <span className={`inline-flex items-center gap-1 text-[10px] uppercase font-semibold ${
-                        queue.paused ? 'text-[#f59e0b]' : 'text-accent'
-                      }`}>
+                      <span
+                        className={`inline-flex items-center gap-1 text-[10px] uppercase font-semibold ${
+                          queue.paused ? 'text-[#f59e0b]' : 'text-accent'
+                        }`}
+                      >
                         {queue.paused ? '⏸ PAUSED' : '● ACTIVE'}
                       </span>
                     </td>
-                    
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => togglePauseMutation.mutate({ name: queue.name, pause: !queue.paused })}
@@ -180,6 +187,105 @@ export const Queues: React.FC = () => {
           </table>
         </div>
       </div>
+
+      <Drawer
+        open={!!selectedQueue}
+        title={selectedQueue ? `Queue: ${selectedQueue}` : ''}
+        onClose={() => setSelectedQueue(null)}
+      >
+        {detailLoading ? (
+          <div className="flex items-center gap-2 text-textMuted text-xs">
+            <span className="w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+            Loading queue detail...
+          </div>
+        ) : queueDetail ? (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span
+                className={`inline-flex items-center gap-1 text-[10px] uppercase font-semibold ${
+                  queueDetail.paused ? 'text-[#f59e0b]' : 'text-accent'
+                }`}
+              >
+                {queueDetail.paused ? '⏸ PAUSED' : '● ACTIVE'}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  togglePauseMutation.mutate({
+                    name: queueDetail.name,
+                    pause: !queueDetail.paused,
+                  })
+                }
+                disabled={togglePauseMutation.isPending}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 text-[10px] font-bold border uppercase rounded-[4px] tracking-wider transition-colors ${
+                  queueDetail.paused
+                    ? 'border-accent/40 bg-accent/5 hover:bg-accent/10 text-accent'
+                    : 'border-danger/40 bg-danger/5 hover:bg-danger/10 text-danger'
+                }`}
+              >
+                {queueDetail.paused ? (
+                  <>
+                    <Play size={10} /> Resume
+                  </>
+                ) : (
+                  <>
+                    <Pause size={10} /> Pause
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {(
+                [
+                  ['Pending', queueDetail.pending],
+                  ['Running', queueDetail.running],
+                  ['Scheduled', queueDetail.scheduled],
+                  ['Completed', queueDetail.completed],
+                  ['Failed', queueDetail.failed],
+                  ['Cancelled', queueDetail.cancelled],
+                  ['Dead', queueDetail.dead],
+                ] as const
+              ).map(([label, value]) => (
+                <div key={label} className="border border-darkBorder bg-darkSurface/10 p-3 rounded-[4px]">
+                  <div className="text-[10px] text-textMuted uppercase mb-1">{label}</div>
+                  <div
+                    className={`text-sm font-bold ${
+                      label === 'Dead' && value > 0
+                        ? 'text-[#f59e0b]'
+                        : label === 'Failed' && value > 0
+                          ? 'text-[#f59e0b]'
+                          : 'text-textPrimary'
+                    }`}
+                  >
+                    {label === 'Dead' && value > 0 ? (
+                      <Link to="/dead" className="hover:underline">
+                        {value}
+                      </Link>
+                    ) : (
+                      value
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="border border-darkBorder bg-darkSurface/10 p-3 rounded-[4px] space-y-2">
+              <div className="text-[10px] text-textMuted uppercase font-bold">Worker Capacity</div>
+              <div className="flex justify-between text-xs">
+                <span className="text-textMuted">Instances</span>
+                <span className="text-textPrimary font-bold">{queueDetail.worker_instances}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-textMuted">Max Concurrent</span>
+                <span className="text-accent font-bold">{queueDetail.worker_capacity}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-textMuted text-xs">Unable to load queue detail.</p>
+        )}
+      </Drawer>
     </div>
   );
 };

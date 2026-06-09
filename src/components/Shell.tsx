@@ -70,6 +70,54 @@ export const Shell: React.FC<ShellProps> = ({ children, connected, workersOnline
             >
               Queues
             </NavLink>
+            <NavLink
+              to="/dead"
+              className={({ isActive }) =>
+                `text-xs px-3 py-1.5 border rounded-[4px] transition-all duration-150 ${
+                  isActive
+                    ? 'border-darkBorder bg-darkSurface text-textPrimary font-medium'
+                    : 'border-transparent text-textMuted hover:text-textPrimary hover:bg-darkSurface/30'
+                }`
+              }
+            >
+              Dead Letter
+            </NavLink>
+            <NavLink
+              to="/periodic"
+              className={({ isActive }) =>
+                `text-xs px-3 py-1.5 border rounded-[4px] transition-all duration-150 ${
+                  isActive
+                    ? 'border-darkBorder bg-darkSurface text-textPrimary font-medium'
+                    : 'border-transparent text-textMuted hover:text-textPrimary hover:bg-darkSurface/30'
+                }`
+              }
+            >
+              Periodic
+            </NavLink>
+            <NavLink
+              to="/workflows"
+              className={({ isActive }) =>
+                `text-xs px-3 py-1.5 border rounded-[4px] transition-all duration-150 ${
+                  isActive
+                    ? 'border-darkBorder bg-darkSurface text-textPrimary font-medium'
+                    : 'border-transparent text-textMuted hover:text-textPrimary hover:bg-darkSurface/30'
+                }`
+              }
+            >
+              Workflows
+            </NavLink>
+            <NavLink
+              to="/concurrency"
+              className={({ isActive }) =>
+                `text-xs px-3 py-1.5 border rounded-[4px] transition-all duration-150 ${
+                  isActive
+                    ? 'border-darkBorder bg-darkSurface text-textPrimary font-medium'
+                    : 'border-transparent text-textMuted hover:text-textPrimary hover:bg-darkSurface/30'
+                }`
+              }
+            >
+              Concurrency
+            </NavLink>
           </nav>
         </div>
 

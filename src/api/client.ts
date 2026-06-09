@@ -6,6 +6,17 @@ export interface ApiError extends Error {
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const API_PREFIX = `${BASE_URL}/fluvio/api`;
 
+const BASIC_AUTH_USER = import.meta.env.VITE_API_BASIC_AUTH_USER || '';
+const BASIC_AUTH_PASSWORD = import.meta.env.VITE_API_BASIC_AUTH_PASSWORD || '';
+
+function getAuthHeaders(): Record<string, string> {
+  if (BASIC_AUTH_USER && BASIC_AUTH_PASSWORD) {
+    const credentials = btoa(`${BASIC_AUTH_USER}:${BASIC_AUTH_PASSWORD}`);
+    return { Authorization: `Basic ${credentials}` };
+  }
+  return {};
+}
+
 /** Extract a human-readable message from an API error payload. */
 export function getApiErrorMessage(error: unknown, fallback = 'Request failed'): string {
   if (!error || typeof error !== 'object') return fallback;
@@ -52,6 +63,7 @@ export async function request<T>(path: string, options?: RequestInit): Promise<T
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...getAuthHeaders(),
       ...options?.headers,
     },
   });
