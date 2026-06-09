@@ -3,7 +3,8 @@ export interface ApiError extends Error {
   info?: { error?: string; message?: string } | string;
 }
 
-import { getApiPrefix, getBasicAuthCredentials } from '../config';
+import { getApiPrefix, getBasicAuthCredentials, isMockMode } from '../config';
+import { mockRequest } from '../mock/api';
 
 function getAuthHeaders(): Record<string, string> {
   const { user, password } = getBasicAuthCredentials();
@@ -54,6 +55,10 @@ async function handleResponse<T>(response: Response): Promise<T> {
  * Generic request wrapper for Fluvio REST API.
  */
 export async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  if (isMockMode()) {
+    return mockRequest<T>(path, options);
+  }
+
   const url = `${getApiPrefix()}${path}`;
 
   const response = await fetch(url, {

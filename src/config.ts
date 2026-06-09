@@ -37,3 +37,11 @@ export function getBasicAuthCredentials(): { user: string; password: string } {
 export function getApiPrefix(): string {
   return `${getApiBaseUrl()}/fluvio/api`;
 }
+
+export function isMockMode(): boolean {
+  return import.meta.env.VITE_MOCK_MODE === 'true';
+}
+
+export function useHashRouter(): boolean {
+  return import.meta.env.VITE_USE_HASH_ROUTER === 'true';
+}

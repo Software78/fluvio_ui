@@ -61,7 +61,7 @@ export const JobDetail: React.FC = () => {
   const replayMutation = useMutation({
     mutationFn: () => replayDeadJob(jobId),
     onSuccess: () => {
-      showToast('Dead job replayed', 'success');
+      showToast('Job re-enqueued as pending', 'success');
       invalidateJobQueries();
       queryClient.invalidateQueries({ queryKey: ['dead'] });
       setConfirmAction(null);
@@ -175,7 +175,7 @@ export const JobDetail: React.FC = () => {
       <ConfirmModal
         open={confirmAction === 'replay'}
         title="Replay Dead Job"
-        message={`Replay job #${job.id} from the dead letter queue? A new pending job will be created.`}
+        message={`Replay job #${job.id} from the dead letter queue? The existing job will be reset to pending (same ID, attempt reset).`}
         confirmLabel="Replay"
         loading={replayMutation.isPending}
         onConfirm={() => replayMutation.mutate()}

@@ -9,8 +9,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:demo": "tsc -b && VITE_MOCK_MODE=true VITE_BASE_PATH=/fluvio_ui/ VITE_USE_HASH_ROUTER=true vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:demo": "npm run build:demo && vite preview"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.0",

@@ -100,6 +100,29 @@ npm run build    # outputs to dist/
 npm run preview  # serve dist/ locally
 ```
 
+## Demo (GitHub Pages)
+
+A fully interactive demo with mock data is hosted at **https://software78.github.io/fluvio_ui/**. It deploys automatically on every push to `main` and does not affect the Docker production build.
+
+**One-time setup:** enable GitHub Pages with source "GitHub Actions" in the repo Settings → Pages.
+
+### Local mock development
+
+```bash
+VITE_MOCK_MODE=true npm run dev
+```
+
+All pages work with in-memory fixtures — enqueue jobs, pause queues, retry dead letters, etc.
+
+### Demo build preview
+
+```bash
+npm run build:demo    # mock mode + /fluvio_ui/ base path + HashRouter
+npm run preview:demo  # build and serve locally
+```
+
+Open http://localhost:4173/fluvio_ui/ to verify the GitHub Pages layout.
+
 ## License
 
 Apache 2.0 — see the [Fluvio](https://github.com/Software78/fluvio) project for backend licensing.

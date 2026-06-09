@@ -46,7 +46,7 @@ export const DeadLetter: React.FC = () => {
   const replayOneMutation = useMutation({
     mutationFn: replayDeadJob,
     onSuccess: () => {
-      showToast('Job replayed', 'success');
+      showToast('Job re-enqueued as pending', 'success');
       invalidateDead();
     },
     onError: (err) => showToast(getApiErrorMessage(err, 'Failed to replay job'), 'error'),
@@ -56,9 +56,9 @@ export const DeadLetter: React.FC = () => {
     mutationFn: replayDeadJobs,
     onSuccess: (result) => {
       if (result.errors && result.errors.length > 0) {
-        showToast(`Replayed ${result.replayed}, ${result.errors.length} failed`, 'error');
+        showToast(`Re-enqueued ${result.replayed}, ${result.errors.length} failed`, 'error');
       } else {
-        showToast(`Replayed ${result.replayed} job(s)`, 'success');
+        showToast(`Re-enqueued ${result.replayed} job(s) as pending`, 'success');
       }
       setSelected(new Set());
       setBulkConfirmOpen(false);
@@ -296,7 +296,7 @@ export const DeadLetter: React.FC = () => {
       <ConfirmModal
         open={bulkConfirmOpen}
         title="Bulk Replay"
-        message={`Replay ${selected.size} selected dead job(s)? Each will be re-enqueued as pending.`}
+        message={`Replay ${selected.size} selected dead job(s)? Each existing job will be reset to pending (same ID, attempt reset).`}
         confirmLabel="Replay All"
         loading={bulkReplayMutation.isPending}
         onConfirm={() => bulkReplayMutation.mutate([...selected])}

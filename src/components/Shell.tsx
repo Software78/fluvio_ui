@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { Terminal } from 'lucide-react';
+import { isMockMode } from '../config';
 
 interface ShellProps {
   children: React.ReactNode;
@@ -123,6 +124,14 @@ export const Shell: React.FC<ShellProps> = ({ children, connected, workersOnline
 
         {/* Live SSE Status and Workers Online */}
         <div className="flex items-center gap-5">
+          {isMockMode() && (
+            <div className="px-2.5 py-1 bg-amber-500/10 border border-amber-500/30 rounded-[4px]">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400">
+                Demo — mock data
+              </span>
+            </div>
+          )}
+
           <div className="text-[11px] text-textMuted font-mono">
             workers_online: <span className="text-textPrimary font-bold">{workersOnline}</span>
           </div>
